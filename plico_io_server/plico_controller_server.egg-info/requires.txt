@@ -1,0 +1,4 @@
+plico
+meross_iot
+numpy
+six

@@ -1,0 +1,4 @@
+[console_scripts]
+plico_io_monitor_start = plico_io_server.process_monitor.process_monitor_start:main
+plico_io_start = plico_io_server.scripts.io_start:main
+plico_io_stop = plico_io_server.scripts.io_stop:main

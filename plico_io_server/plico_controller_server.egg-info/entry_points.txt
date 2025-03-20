@@ -1,0 +1,4 @@
+[console_scripts]
+plico_controller_kill_all = plico_controller_server.scripts.controller_kill_all:main
+plico_controller_start = plico_controller_server.scripts.controller_start:main
+plico_controller_stop = plico_controller_server.scripts.controller_stop:main
