@@ -19,6 +19,8 @@ class ControllerRunner(BaseRunner):
     """
     
     RUNNING_MESSAGE = "Controller server is running."
+    # Default iteration interval = 36 seconds (100 times per hour)
+    DEFAULT_ITERATION_INTERVAL_SEC = 36.0
     
     def __init__(self):
         """Create a runner for controller server."""
@@ -26,6 +28,7 @@ class ControllerRunner(BaseRunner):
         self._controller = None
         self._controller_device = None
         self._logger = Logger.of(self.__class__.__name__)
+        self._iteration_interval_sec = self.DEFAULT_ITERATION_INTERVAL_SEC
         
     def _createControllerDevice(self):
         """Create the appropriate controller device based on configuration."""
@@ -70,6 +73,29 @@ class ControllerRunner(BaseRunner):
         """Get the status port from configuration."""
         return self.configuration.statusPort(self.getConfigurationSection())
         
+    def _getIterationInterval(self):
+        """Get the iteration interval from configuration or use default."""
+        try:
+            # Try to get custom interval from configuration, with a minimum allowed value
+            interval_sec = float(self.configuration.getValue(
+                self.getConfigurationSection(), 'iteration_interval_sec', 
+                self.DEFAULT_ITERATION_INTERVAL_SEC))
+            
+            # Enforce minimum threshold to prevent excessive load
+            MIN_INTERVAL_SEC = 1.0  # Minimum 1 second between iterations
+            if interval_sec < MIN_INTERVAL_SEC:
+                self._logger.warning(
+                    f"Configured iteration interval {interval_sec}s is below minimum threshold. "
+                    f"Using minimum value of {MIN_INTERVAL_SEC}s")
+                interval_sec = MIN_INTERVAL_SEC
+                
+            return interval_sec
+        except (ValueError, KeyError) as e:
+            self._logger.notice(
+                f"Using default iteration interval of {self.DEFAULT_ITERATION_INTERVAL_SEC}s "
+                f"(100 iterations per hour)")
+            return self.DEFAULT_ITERATION_INTERVAL_SEC
+        
     def _setUp(self):
         """Set up the controller server."""
         self._logger = Logger.of("Controller runner")
@@ -84,6 +110,12 @@ class ControllerRunner(BaseRunner):
             self._zmqPorts.SERVER_STATUS_PORT, hwm=1)
             
         self._createControllerDevice()
+        
+        # Get the iteration interval from configuration
+        self._iteration_interval_sec = self._getIterationInterval()
+        self._logger.notice(
+            f"Controller will run at maximum {3600/self._iteration_interval_sec:.1f} times per hour "
+            f"(every {self._iteration_interval_sec:.1f}s)")
         
         self._controller = Controller(
             self.name,
@@ -103,7 +135,7 @@ class ControllerRunner(BaseRunner):
             self._controller,
             Logger.of("Controller control loop"),
             time,
-            0.02).start()
+            self._iteration_interval_sec).start()
         self._logger.notice("Terminated")
         
     @override
