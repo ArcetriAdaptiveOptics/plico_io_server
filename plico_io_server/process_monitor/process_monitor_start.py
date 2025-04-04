@@ -1,74 +1,44 @@
 #!/usr/bin/env python
-import os
 import sys
-import time
-import traceback
-import argparse
 from plico.utils.config_file_manager import ConfigFileManager
-from plico.utils.logger import Logger
-from plico.utils.control_utilities import ControlUtilities
-from plico.utils.killer import Killer
-from plico_controller_server.utils.constants import Constants
-from plico.rpc.zmq_ports import ZmqPorts
-
-
-def _parseArguments():
-    """Parse command line arguments.
-    
-    Returns
-    -------
-    Namespace
-        Parsed command line arguments
-    """
-    parser = argparse.ArgumentParser(description='Start process monitor')
-    parser.add_argument('--config',
-                        type=str,
-                        help='Server configuration file',
-                        default=None)
-    return parser.parse_args()
+# Use the standard ProcessMonitorRunner from plico.utils
+from plico.utils.process_monitor_runner import ProcessMonitorRunner
+# Use constants specifically from plico_io_server
+from plico_io_server.utils.constants import Constants
 
 
 def main():
-    """Start the process monitor."""
-    args = _parseArguments()
-    
-    # Initialize config
-    cfgMgr = ConfigFileManager(args.config)
-    
-    # Set up logger
-    logLevel = cfgMgr.value(Constants.PROCESS_MONITOR_CONFIG_SECTION, 'logLevel')
-    logger = Logger.of(Constants.PROCESS_MONITOR_CONFIG_SECTION)
-    logger.setLevel(logLevel)
-    
-    # Check if already running
-    if ControlUtilities.isProcessRunning(Constants.PROCESS_MONITOR_CONFIG_SECTION):
-        logger.notice('Process monitor already running. Terminating.')
-        return
-        
-    # Start process monitor
-    try:
-        logger.notice('Starting process monitor')
-        
-        # Import the runner class
-        from plico_controller_server.process_monitor.process_monitor_runner import ProcessMonitorRunner
-        
-        # Get process monitor configuration
-        section = Constants.PROCESS_MONITOR_CONFIG_SECTION
-        zmqPorts = ZmqPorts.fromConfig(cfgMgr, section)
-        
-        # Create runner
-        runner = ProcessMonitorRunner(section, zmqPorts)
-        
-        # Set signal handlers and start runner
-        killer = Killer()
-        runner.run()
-        runner.terminate()
-        
-    except Exception as e:
-        logger.error('Error in process monitor: %s' % str(e))
-        traceback.print_exc()
-        
-    logger.notice('Process monitor terminated')
+    """Initializes and starts the ProcessMonitorRunner for plico_io_server."""
+    # Define the prefix for controller sections (e.g., 'controller1', 'controller2')
+    # This must match the sections in plico_io_server.conf that define controllers.
+    controller_prefix = 'controller'
+
+    # Instantiate the standard runner
+    # Constants.SERVER_PROCESS_NAME ('plico_io_server') is the base name of the script
+    # that the monitor will call to start individual controllers.
+    # default_server_config_prefix tells the runner to look for sections starting
+    # with 'controller' in the config file.
+    runner = ProcessMonitorRunner(Constants.SERVER_PROCESS_NAME,
+                                  default_server_config_prefix=controller_prefix)
+
+    # Correctly initialize ConfigFileManager for plico_io_server
+    configFileManager = ConfigFileManager(Constants.APP_NAME,
+                                          Constants.APP_AUTHOR,
+                                          Constants.THIS_PACKAGE)
+
+    # Ensure the default config file is installed if it doesn't exist
+    configFileManager.installConfigFileFromPackage()
+
+    # Prepare arguments for the runner's start method:
+    # argv[0]: script name (can be empty)
+    # argv[1]: path to the configuration file
+    # argv[2]: section name for the process monitor itself in the config file
+    argv = ['',
+            configFileManager.getConfigFilePath(),
+            Constants.PROCESS_MONITOR_CONFIG_SECTION]
+
+    # Start the runner and exit with its status code
+    sys.exit(runner.start(argv))
 
 
 if __name__ == '__main__':
